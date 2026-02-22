@@ -1,0 +1,20 @@
+
+═══ Building linux (x86_64-unknown-linux-gnu) ═══
+   Compiling domain_blocker v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+    Finished `release` profile [optimized] target(s) in 17.87s
+
+═══ Building android-arm64 (aarch64-linux-android) ═══
+   Compiling domain_blocker v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+    Finished `release` profile [optimized] target(s) in 18.17s
+
+═══ Building android-armv7 (armv7-linux-androideabi) ═══
+   Compiling domain_blocker v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+    Finished `release` profile [optimized] target(s) in 17.88s
+
+═══ Building android-x86 (i686-linux-android) ═══
+   Compiling domain_blocker v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+    Finished `release` profile [optimized] target(s) in 17.08s
+
+═══ Building android-x86_64 (x86_64-linux-android) ═══
+   Compiling domain_blocker v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+    Finished `release` profile [optimized] target(s) in 16.89s

@@ -1,0 +1,23 @@
+[package]
+name = "domain_blocker"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+# HTTP client - blocking feature avoids pulling in tokio runtime
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "deflate", "rustls-tls"] }
+# JSON for filter list metadata persistence
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
