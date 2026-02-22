@@ -1,4 +1,4 @@
-use domain_blocker::DomainTree;
+use blocker_engine::DomainTree;
 
 fn main() {
     println!("Domain Blocker Library");

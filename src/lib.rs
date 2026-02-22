@@ -533,146 +533,323 @@ impl DomainTree {
 }
 
 // ============================================================================
-// FFI Interface
+// FFI Interface — blocker_engine_*
+//
+// All public functionality is routed through FilterListManager, which owns the
+// DomainTree. The old domain_tree_* symbols are gone; callers must migrate to
+// these blocker_engine_* equivalents.
+//
+// Lifetime contract:
+//   blocker_engine_new        → returns opaque *mut BlockerEngine handle
+//   blocker_engine_free       → must be called exactly once to release memory
+//   All other functions       → require a non-null handle
 // ============================================================================
 
+use crate::filter_list::FilterListManager;
+
+// Type alias so the rest of the FFI code reads naturally.
+type BlockerEngine = FilterListManager;
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+/// Create a new BlockerEngine backed by `storage_dir`.
+/// The directory is created if it does not exist.
+/// Returns an opaque handle; free with `blocker_engine_free`.
 #[no_mangle]
-pub extern "C" fn domain_tree_new() -> *mut DomainTree {
-    Box::into_raw(Box::new(DomainTree::new()))
+pub extern "C" fn blocker_engine_new(
+    storage_dir: *const c_char,
+) -> *mut BlockerEngine {
+    if storage_dir.is_null() {
+        return std::ptr::null_mut();
+    }
+    let dir_str = unsafe {
+        match CStr::from_ptr(storage_dir).to_str() {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        }
+    };
+    Box::into_raw(Box::new(BlockerEngine::new(dir_str)))
 }
 
+/// Free a handle returned by `blocker_engine_new`.
 #[no_mangle]
-pub extern "C" fn domain_tree_free(tree: *mut DomainTree) {
-    if !tree.is_null() { unsafe { let _ = Box::from_raw(tree); } }
-}
-
-#[no_mangle]
-pub extern "C" fn domain_tree_insert(tree: *mut DomainTree, domain: *const c_char) -> bool {
-    if tree.is_null() || domain.is_null() { return false; }
-    unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        (*tree).insert(d)
+pub extern "C" fn blocker_engine_free(engine: *mut BlockerEngine) {
+    if !engine.is_null() {
+        unsafe { let _ = Box::from_raw(engine); }
     }
 }
 
-#[no_mangle]
-pub extern "C" fn domain_tree_insert_with_whitelist(
-    tree: *mut DomainTree, domain: *const c_char, origin: *const c_char,
-) -> bool {
-    if tree.is_null() || domain.is_null() || origin.is_null() { return false; }
-    unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        let o = match CStr::from_ptr(origin).to_str() { Ok(s) => s, Err(_) => return false };
-        (*tree).insert_with_whitelist(d, o)
-    }
-}
+// ── Tree management ───────────────────────────────────────────────────────────
 
+/// Rebuild the active tree from all enabled filter lists stored on disk.
+/// Call once after creating the engine to apply previously saved lists.
+/// Returns the total rule count (0 if no lists or on failure).
 #[no_mangle]
-pub extern "C" fn domain_tree_insert_with_blacklist(
-    tree: *mut DomainTree, domain: *const c_char, origin: *const c_char,
-) -> bool {
-    if tree.is_null() || domain.is_null() || origin.is_null() { return false; }
+pub extern "C" fn blocker_engine_rebuild(
+    engine: *mut BlockerEngine,
+    progress: crate::filter_list::ProgressCallback,
+) -> usize {
+    if engine.is_null() { return 0; }
     unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        let o = match CStr::from_ptr(origin).to_str() { Ok(s) => s, Err(_) => return false };
-        (*tree).insert_with_blacklist(d, o)
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn domain_tree_is_blocked(tree: *const DomainTree, domain: *const c_char) -> bool {
-    if tree.is_null() || domain.is_null() { return false; }
-    unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        (*tree).is_blocked(d)
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn domain_tree_is_blocked_with_origin(
-    tree: *const DomainTree, domain: *const c_char, origin: *const c_char,
-) -> bool {
-    if tree.is_null() || domain.is_null() { return false; }
-    unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        let o = if origin.is_null() { None } else {
-            match CStr::from_ptr(origin).to_str() { Ok(s) => Some(s), Err(_) => None }
-        };
-        (*tree).is_blocked_with_origin(d, o)
-    }
-}
-
-/// Extended check with resource type bitmask and explicit third-party flag.
-/// `resource_mask`: bitmask from `resource_type::*` constants (0 = unknown/any).
-/// `is_third_party`: true if the request crosses an eTLD+1 boundary.
-#[no_mangle]
-pub extern "C" fn domain_tree_is_blocked_ex(
-    tree: *const DomainTree,
-    domain: *const c_char,
-    origin: *const c_char,
-    resource_mask: u16,
-    is_third_party: bool,
-) -> bool {
-    if tree.is_null() || domain.is_null() { return false; }
-    unsafe {
-        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
-        let o = if origin.is_null() { None } else {
-            match CStr::from_ptr(origin).to_str() { Ok(s) => Some(s), Err(_) => None }
-        };
-        (*tree).is_blocked_ex(d, o, resource_mask, is_third_party)
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn domain_tree_save(tree: *const DomainTree, path: *const c_char) -> bool {
-    if tree.is_null() || path.is_null() { return false; }
-    unsafe {
-        let p = match CStr::from_ptr(path).to_str() { Ok(s) => s, Err(_) => return false };
-        (*tree).save_to_file(p).is_ok()
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn domain_tree_load(path: *const c_char) -> *mut DomainTree {
-    if path.is_null() { return std::ptr::null_mut(); }
-    unsafe {
-        let p = match CStr::from_ptr(path).to_str() { Ok(s) => s, Err(_) => return std::ptr::null_mut() };
-        match DomainTree::load_from_file(p) {
-            Ok(t) => Box::into_raw(Box::new(t)),
-            Err(_) => std::ptr::null_mut(),
+        match (*engine).rebuild_tree(progress) {
+            Ok(count) => count,
+            Err(_) => 0,
         }
     }
 }
 
+// ── Filter list management ────────────────────────────────────────────────────
+
+/// Download and install a new filter list from `url` under the given `name`.
+/// `name` must be unique; returns 0 if it already exists or on failure.
+/// Returns the number of rules loaded.
 #[no_mangle]
-pub extern "C" fn domain_tree_bulk_load(
-    tree: *mut DomainTree, domains: *const *const c_char, count: usize,
+pub extern "C" fn blocker_engine_install(
+    engine: *mut BlockerEngine,
+    name: *const c_char,
+    url: *const c_char,
+    progress: crate::filter_list::ProgressCallback,
+) -> usize {
+    if engine.is_null() || name.is_null() || url.is_null() { return 0; }
+    unsafe {
+        let name_str = match CStr::from_ptr(name).to_str() { Ok(s) => s, Err(_) => return 0 };
+        let url_str  = match CStr::from_ptr(url).to_str()  { Ok(s) => s, Err(_) => return 0 };
+        match (*engine).install(name_str, url_str, progress) {
+            Ok(count) => count,
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Re-download a single filter list (conditional GET, re-parse).
+/// Returns rule count, or 0 on failure.
+#[no_mangle]
+pub extern "C" fn blocker_engine_update(
+    engine: *mut BlockerEngine,
+    name: *const c_char,
+    progress: crate::filter_list::ProgressCallback,
+) -> usize {
+    if engine.is_null() || name.is_null() { return 0; }
+    unsafe {
+        let name_str = match CStr::from_ptr(name).to_str() { Ok(s) => s, Err(_) => return 0 };
+        match (*engine).update(name_str, progress) {
+            Ok(count) => count,
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Update all installed filter lists.
+/// Returns total rule count across all lists, or 0 on failure.
+#[no_mangle]
+pub extern "C" fn blocker_engine_update_all(
+    engine: *mut BlockerEngine,
+    progress: crate::filter_list::ProgressCallback,
+) -> usize {
+    if engine.is_null() { return 0; }
+    unsafe {
+        match (*engine).update_all(progress) {
+            Ok(count) => count,
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Remove a filter list entirely (deletes raw file, rebuilds tree).
+/// Returns true on success.
+#[no_mangle]
+pub extern "C" fn blocker_engine_remove(
+    engine: *mut BlockerEngine,
+    name: *const c_char,
+    progress: crate::filter_list::ProgressCallback,
 ) -> bool {
-    if tree.is_null() || domains.is_null() { return false; }
+    if engine.is_null() || name.is_null() { return false; }
+    unsafe {
+        let name_str = match CStr::from_ptr(name).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).remove(name_str, progress).is_ok()
+    }
+}
+
+/// Enable or disable a filter list, rebuilding the tree if changed.
+/// Returns true on success.
+#[no_mangle]
+pub extern "C" fn blocker_engine_set_enabled(
+    engine: *mut BlockerEngine,
+    name: *const c_char,
+    enabled: bool,
+    progress: crate::filter_list::ProgressCallback,
+) -> bool {
+    if engine.is_null() || name.is_null() { return false; }
+    unsafe {
+        let name_str = match CStr::from_ptr(name).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).set_enabled(name_str, enabled, progress).is_ok()
+    }
+}
+
+// ── Direct domain management ──────────────────────────────────────────────────
+//
+// These replace the old domain_tree_insert / domain_tree_bulk_load family.
+// Rules inserted this way live in the engine's tree alongside parsed filter
+// list rules but are NOT persisted to any list file — they survive only until
+// the next rebuild_tree() call. For permanent rules, install a filter list.
+
+/// Insert a universal block rule for `domain` and all its subdomains.
+/// Returns true if the rule was added.
+#[no_mangle]
+pub extern "C" fn blocker_engine_insert(
+    engine: *mut BlockerEngine,
+    domain: *const c_char,
+) -> bool {
+    if engine.is_null() || domain.is_null() { return false; }
+    unsafe {
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).tree.insert(d)
+    }
+}
+
+/// Insert a whitelist (allow) rule: do NOT block `domain` when loaded from `origin`.
+/// Returns true if the rule was added.
+#[no_mangle]
+pub extern "C" fn blocker_engine_insert_with_whitelist(
+    engine: *mut BlockerEngine,
+    domain: *const c_char,
+    origin: *const c_char,
+) -> bool {
+    if engine.is_null() || domain.is_null() || origin.is_null() { return false; }
+    unsafe {
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        let o = match CStr::from_ptr(origin).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).tree.insert_with_whitelist(d, o)
+    }
+}
+
+/// Insert a context block rule: block `domain` ONLY when loaded from `origin`.
+/// Returns true if the rule was added.
+#[no_mangle]
+pub extern "C" fn blocker_engine_insert_with_blacklist(
+    engine: *mut BlockerEngine,
+    domain: *const c_char,
+    origin: *const c_char,
+) -> bool {
+    if engine.is_null() || domain.is_null() || origin.is_null() { return false; }
+    unsafe {
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        let o = match CStr::from_ptr(origin).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).tree.insert_with_blacklist(d, o)
+    }
+}
+
+/// Bulk-insert multiple universal block rules.
+/// `domains` is a C array of `count` null-terminated strings.
+/// Returns true on success (individual bad entries are silently skipped).
+#[no_mangle]
+pub extern "C" fn blocker_engine_bulk_insert(
+    engine: *mut BlockerEngine,
+    domains: *const *const c_char,
+    count: usize,
+) -> bool {
+    if engine.is_null() || domains.is_null() { return false; }
     unsafe {
         for &dp in std::slice::from_raw_parts(domains, count) {
             if dp.is_null() { continue; }
-            if let Ok(s) = CStr::from_ptr(dp).to_str() { (*tree).insert(s); }
+            if let Ok(s) = CStr::from_ptr(dp).to_str() {
+                (*engine).tree.insert(s);
+            }
         }
     }
     true
 }
 
+// ── Query ─────────────────────────────────────────────────────────────────────
+
+/// Check if `domain` is blocked (no origin context).
 #[no_mangle]
-pub extern "C" fn domain_tree_count_blocked(tree: *const DomainTree) -> usize {
-    if tree.is_null() { return 0; }
-    unsafe { (*tree).count_blocked() }
+pub extern "C" fn blocker_engine_is_blocked(
+    engine: *const BlockerEngine,
+    domain: *const c_char,
+) -> bool {
+    if engine.is_null() || domain.is_null() { return false; }
+    unsafe {
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        (*engine).is_blocked(d)
+    }
 }
 
+/// Check if `domain` is blocked given an `origin` page context.
+/// Pass NULL for origin to check without context.
 #[no_mangle]
-pub extern "C" fn domain_tree_get_all_blocked(
-    tree: *const DomainTree, out_domains: *mut *mut c_char, out_count: *mut usize,
+pub extern "C" fn blocker_engine_is_blocked_with_origin(
+    engine: *const BlockerEngine,
+    domain: *const c_char,
+    origin: *const c_char,
 ) -> bool {
-    if tree.is_null() || out_domains.is_null() || out_count.is_null() { return false; }
+    if engine.is_null() || domain.is_null() { return false; }
     unsafe {
-        let domains = (*tree).get_all_blocked();
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        let o = if origin.is_null() { None } else {
+            match CStr::from_ptr(origin).to_str() { Ok(s) => Some(s), Err(_) => None }
+        };
+        (*engine).is_blocked_with_origin(d, o)
+    }
+}
+
+/// Extended check with resource type bitmask and explicit third-party flag.
+/// `resource_mask`: OR of `resource_type::*` constants (0 = any resource type).
+/// `is_third_party`: true when the request crosses an eTLD+1 boundary.
+#[no_mangle]
+pub extern "C" fn blocker_engine_is_blocked_ex(
+    engine: *const BlockerEngine,
+    domain: *const c_char,
+    origin: *const c_char,
+    resource_mask: u16,
+    is_third_party: bool,
+) -> bool {
+    if engine.is_null() || domain.is_null() { return false; }
+    unsafe {
+        let d = match CStr::from_ptr(domain).to_str() { Ok(s) => s, Err(_) => return false };
+        let o = if origin.is_null() { None } else {
+            match CStr::from_ptr(origin).to_str() { Ok(s) => Some(s), Err(_) => None }
+        };
+        (*engine).is_blocked_ex(d, o, resource_mask, is_third_party)
+    }
+}
+
+// ── Stats & enumeration ───────────────────────────────────────────────────────
+
+/// Total number of rules currently in the active tree.
+#[no_mangle]
+pub extern "C" fn blocker_engine_total_rules(
+    engine: *const BlockerEngine,
+) -> usize {
+    if engine.is_null() { return 0; }
+    unsafe { (*engine).total_rule_count() }
+}
+
+/// Count of all blocked-domain entries in the tree (all rule types).
+/// Equivalent to the old `domain_tree_count_blocked`.
+#[no_mangle]
+pub extern "C" fn blocker_engine_count_blocked(
+    engine: *const BlockerEngine,
+) -> usize {
+    if engine.is_null() { return 0; }
+    unsafe { (*engine).tree.count_blocked() }
+}
+
+/// Return all blocked domains as a null-terminated C string array.
+/// `*out_count` is set to the number of strings.
+/// The caller must free the array with `blocker_engine_free_string_array`.
+#[no_mangle]
+pub extern "C" fn blocker_engine_get_all_blocked(
+    engine: *const BlockerEngine,
+    out_domains: *mut *mut c_char,
+    out_count: *mut usize,
+) -> bool {
+    if engine.is_null() || out_domains.is_null() || out_count.is_null() { return false; }
+    unsafe {
+        let domains = (*engine).tree.get_all_blocked();
         let count = domains.len();
-        let c_strings: Vec<*mut c_char> = domains.into_iter()
+        let c_strings: Vec<*mut c_char> = domains
+            .into_iter()
             .map(|s| std::ffi::CString::new(s).unwrap().into_raw())
             .collect();
         let boxed = c_strings.into_boxed_slice();
@@ -682,8 +859,12 @@ pub extern "C" fn domain_tree_get_all_blocked(
     }
 }
 
+/// Free a string array returned by `blocker_engine_get_all_blocked`.
 #[no_mangle]
-pub extern "C" fn domain_tree_free_string_array(domains: *mut *mut c_char, count: usize) {
+pub extern "C" fn blocker_engine_free_string_array(
+    domains: *mut *mut c_char,
+    count: usize,
+) {
     if domains.is_null() { return; }
     unsafe {
         let slice = std::slice::from_raw_parts_mut(domains, count);
@@ -691,6 +872,46 @@ pub extern "C" fn domain_tree_free_string_array(domains: *mut *mut c_char, count
             if !ptr.is_null() { let _ = std::ffi::CString::from_raw(ptr); }
         }
         let _ = Box::from_raw(std::slice::from_raw_parts_mut(domains, count));
+    }
+}
+
+// ── Metadata accessors ────────────────────────────────────────────────────────
+
+/// Returns metadata for a single installed list as a JSON C string.
+/// Returns NULL if not found. Free with `blocker_engine_free_string`.
+#[no_mangle]
+pub extern "C" fn blocker_engine_get_list_info(
+    engine: *const BlockerEngine,
+    name: *const c_char,
+) -> *mut c_char {
+    if engine.is_null() || name.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let name_str = match CStr::from_ptr(name).to_str() { Ok(s) => s, Err(_) => return std::ptr::null_mut() };
+        match (*engine).get_list_info(name_str) {
+            Some(meta) => crate::filter_list::metadata_to_json_cstring(meta).unwrap_or(std::ptr::null_mut()),
+            None => std::ptr::null_mut(),
+        }
+    }
+}
+
+/// Returns all installed lists as a JSON array C string.
+/// Returns NULL on failure. Free with `blocker_engine_free_string`.
+#[no_mangle]
+pub extern "C" fn blocker_engine_get_all_lists(
+    engine: *const BlockerEngine,
+) -> *mut c_char {
+    if engine.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let lists = (*engine).get_all_lists();
+        crate::filter_list::all_metadata_to_json_cstring(lists).unwrap_or(std::ptr::null_mut())
+    }
+}
+
+/// Free a JSON C string returned by any `blocker_engine_get_*` function.
+#[no_mangle]
+pub extern "C" fn blocker_engine_free_string(s: *mut c_char) {
+    if !s.is_null() {
+        unsafe { let _ = std::ffi::CString::from_raw(s); }
     }
 }
 

@@ -122,10 +122,10 @@ run_build() {
         echo "      ${size}  ${f#$RUST_PROJECT_DIR/}"
         found=$((found+1))
     done < <(find "$RUST_PROJECT_DIR/target" \
-        \( -name "libdomain_blocker.so" -o \
-           -name "libdomain_blocker.a"  -o \
-           -name "libdomain_blocker.dylib" -o \
-           -name "domain_blocker.dll" \) 2>/dev/null | sort)
+        \( -name "libblocker_engine.so" -o \
+           -name "libblocker_engine.a"  -o \
+           -name "libblocker_engine.dylib" -o \
+           -name "blocker_engine.dll" \) 2>/dev/null | sort)
     if [ $found -eq 0 ]; then
         warn "No artifacts produced — NDK/toolchain may not be configured"
         info "Run with --verbose to see full build output"
@@ -134,7 +134,7 @@ run_build() {
 
 if [ "$NO_BUILD" = true ]; then
     # Just verify something exists
-    if ! find "$RUST_PROJECT_DIR/target" \( -name "libdomain_blocker.*" -o -name "domain_blocker.dll" \) 2>/dev/null | grep -q .; then
+    if ! find "$RUST_PROJECT_DIR/target" \( -name "libblocker_engine.*" -o -name "blocker_engine.dll" \) 2>/dev/null | grep -q .; then
         err "No Rust artifacts found and --no-build is set."
         info "Run:  ./build.sh -r   (or -t android -r, etc.)"
         exit 1
@@ -149,7 +149,7 @@ elif [ -n "$BUILD_TARGET" ]; then
     if [ "$BUILD_TARGET" = "android" ] || [ "$BUILD_TARGET" = "all" ]; then
         android_built=0
         for triple in aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android; do
-            [ -f "$RUST_PROJECT_DIR/target/$triple/release/libdomain_blocker.so" ] && android_built=$((android_built+1))
+            [ -f "$RUST_PROJECT_DIR/target/$triple/release/libblocker_engine.so" ] && android_built=$((android_built+1))
         done
         if [ $android_built -eq 0 ] && [ "$DRY_RUN" = false ]; then
             echo ""
@@ -173,7 +173,7 @@ elif [ -n "$BUILD_TARGET" ]; then
     ok "Rust build step complete"
 else
     # No target specified — build host platform if nothing exists yet
-    if find "$RUST_PROJECT_DIR/target" \( -name "libdomain_blocker.*" -o -name "domain_blocker.dll" \) 2>/dev/null | grep -q .; then
+    if find "$RUST_PROJECT_DIR/target" \( -name "libblocker_engine.*" -o -name "blocker_engine.dll" \) 2>/dev/null | grep -q .; then
         ok "Rust artifacts already present (pass --target to rebuild)"
     else
         warn "No artifacts found — building for host platform..."
@@ -210,11 +210,11 @@ copy_file() {
 }
 
 # Linux
-LINUX_LIB="$RUST_LIB_DIR/libdomain_blocker.so"
+LINUX_LIB="$RUST_LIB_DIR/libblocker_engine.so"
 if [ -f "$LINUX_LIB" ]; then
     ensure_dir "$FLUTTER_PROJECT/linux"
-    copy_file "$LINUX_LIB" "$FLUTTER_PROJECT/linux/libdomain_blocker.so" "libdomain_blocker.so → linux/"
-    copy_file "$LINUX_LIB" "$FLUTTER_PROJECT/libdomain_blocker.so"       "libdomain_blocker.so → project root"
+    copy_file "$LINUX_LIB" "$FLUTTER_PROJECT/linux/libblocker_engine.so" "libblocker_engine.so → linux/"
+    copy_file "$LINUX_LIB" "$FLUTTER_PROJECT/libblocker_engine.so"       "libblocker_engine.so → project root"
 fi
 
 # Android
@@ -231,16 +231,16 @@ android_count=0
 # This prevents a host x86_64 .so from a prior run from lingering in
 # arm64-v8a/ and causing an EM_X86_64 vs EM_AARCH64 crash at runtime.
 if [ "$DRY_RUN" = false ] && [ -d "$ANDROID_JNI" ]; then
-    find "$ANDROID_JNI" -name "libdomain_blocker.so" -delete 2>/dev/null || true
+    find "$ANDROID_JNI" -name "libblocker_engine.so" -delete 2>/dev/null || true
     [ "$VERBOSE" = true ] && info "Cleared stale JNI artifacts"
 fi
 
 for triple in "${!ANDROID_TARGETS[@]}"; do
     abi="${ANDROID_TARGETS[$triple]}"
-    src="$RUST_PROJECT_DIR/target/$triple/release/libdomain_blocker.so"
+    src="$RUST_PROJECT_DIR/target/$triple/release/libblocker_engine.so"
     if [ -f "$src" ]; then
         ensure_dir "$ANDROID_JNI/$abi"
-        copy_file "$src" "$ANDROID_JNI/$abi/libdomain_blocker.so" "libdomain_blocker.so → android/$abi/" && android_count=$((android_count+1))
+        copy_file "$src" "$ANDROID_JNI/$abi/libblocker_engine.so" "libblocker_engine.so → android/$abi/" && android_count=$((android_count+1))
     fi
 done
 if [ $android_count -gt 0 ]; then
@@ -249,7 +249,7 @@ else
     warn "No Android libraries found — cleaning any stale JNI artifacts to prevent arch mismatch crashes"
     # Remove any leftover .so from previous runs (e.g. host x86_64 copied into arm64-v8a)
     if [ "$DRY_RUN" = false ] && [ -d "$ANDROID_JNI" ]; then
-        find "$ANDROID_JNI" -name "libdomain_blocker.so" -delete 2>/dev/null && \
+        find "$ANDROID_JNI" -name "libblocker_engine.so" -delete 2>/dev/null && \
             info "Removed stale JNI artifacts" || true
     fi
     info "To build for Android and re-run:"
@@ -261,26 +261,26 @@ fi
 IOS_LIBS="$FLUTTER_PROJECT/ios/Libs"
 ios_count=0
 for triple in "aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim"; do
-    src="$RUST_PROJECT_DIR/target/$triple/release/libdomain_blocker.a"
+    src="$RUST_PROJECT_DIR/target/$triple/release/libblocker_engine.a"
     if [ -f "$src" ]; then
         ensure_dir "$IOS_LIBS"
-        copy_file "$src" "$IOS_LIBS/libdomain_blocker_${triple}.a" "libdomain_blocker.a → ios/$triple" && ios_count=$((ios_count+1))
+        copy_file "$src" "$IOS_LIBS/libblocker_engine_${triple}.a" "libblocker_engine.a → ios/$triple" && ios_count=$((ios_count+1))
     fi
 done
 [ $ios_count -gt 0 ] && ok "iOS: $ios_count slice(s) copied" || warn "No iOS libraries found (run with --target ios to build)"
 
 # macOS
-MACOS_LIB="$RUST_LIB_DIR/libdomain_blocker.dylib"
+MACOS_LIB="$RUST_LIB_DIR/libblocker_engine.dylib"
 if [ -f "$MACOS_LIB" ]; then
     ensure_dir "$FLUTTER_PROJECT/macos"
-    copy_file "$MACOS_LIB" "$FLUTTER_PROJECT/macos/libdomain_blocker.dylib" "libdomain_blocker.dylib → macos/"
+    copy_file "$MACOS_LIB" "$FLUTTER_PROJECT/macos/libblocker_engine.dylib" "libblocker_engine.dylib → macos/"
 fi
 
 # Windows
-WINDOWS_LIB="$RUST_LIB_DIR/domain_blocker.dll"
+WINDOWS_LIB="$RUST_LIB_DIR/blocker_engine.dll"
 if [ -f "$WINDOWS_LIB" ]; then
     ensure_dir "$FLUTTER_PROJECT/windows"
-    copy_file "$WINDOWS_LIB" "$FLUTTER_PROJECT/windows/domain_blocker.dll" "domain_blocker.dll → windows/"
+    copy_file "$WINDOWS_LIB" "$FLUTTER_PROJECT/windows/blocker_engine.dll" "blocker_engine.dll → windows/"
 fi
 
 # Dart wrapper files
@@ -366,11 +366,11 @@ Flutter app : $FLUTTER_PROJECT ($PROJECT_NAME)
 Files copied: $COPIED  |  skipped: $SKIPPED
 
 Platforms:
-$([ -f "$FLUTTER_PROJECT/linux/libdomain_blocker.so" ]   && echo "  ✓ Linux"   || echo "  - Linux")
+$([ -f "$FLUTTER_PROJECT/linux/libblocker_engine.so" ]   && echo "  ✓ Linux"   || echo "  - Linux")
 $([ -d "$ANDROID_JNI" ] && [ "$(ls -A "$ANDROID_JNI" 2>/dev/null)" ] && echo "  ✓ Android" || echo "  - Android")
 $([ -d "$IOS_LIBS" ]    && [ "$(ls -A "$IOS_LIBS" 2>/dev/null)" ]    && echo "  ✓ iOS"     || echo "  - iOS")
-$([ -f "$FLUTTER_PROJECT/macos/libdomain_blocker.dylib" ] && echo "  ✓ macOS"  || echo "  - macOS")
-$([ -f "$FLUTTER_PROJECT/windows/domain_blocker.dll" ]    && echo "  ✓ Windows" || echo "  - Windows")
+$([ -f "$FLUTTER_PROJECT/macos/libblocker_engine.dylib" ] && echo "  ✓ macOS"  || echo "  - macOS")
+$([ -f "$FLUTTER_PROJECT/windows/blocker_engine.dll" ]    && echo "  ✓ Windows" || echo "  - Windows")
 EOF
     ok "Log saved: .domain_blocker_migration.log"
 fi

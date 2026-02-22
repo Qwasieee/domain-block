@@ -402,7 +402,7 @@ impl FilterListManager {
         let client = reqwest::blocking::Client::builder()
             .gzip(true)
             .deflate(true)
-            .user_agent("DomainBlocker/1.0")
+            .user_agent("BlockerEngine/1.0")
             .timeout(std::time::Duration::from_secs(60))
             .build()
             .map_err(|e| FilterError::Http(e.to_string()))?;

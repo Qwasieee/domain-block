@@ -14,7 +14,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_NAME="domain_blocker"
+PROJECT_NAME="blocker_engine"
 BUILD_DIR="target"
 LOG_FILE="build.log"
 
