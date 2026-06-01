@@ -1,15 +1,140 @@
 
 ═══ Building linux (x86_64-unknown-linux-gnu) ═══
-    Finished `release` profile [optimized] target(s) in 0.10s
+   Compiling blocker_engine v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+warning: type `ParsedCosmeticRule` is more private than the item `parse_cosmetic_line`
+   --> src/cosmetic.rs:422:1
+    |
+422 | pub fn parse_cosmetic_line(line: &str) -> Option<ParsedCosmeticRule> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `parse_cosmetic_line` is reachable at visibility `pub`
+    |
+note: but type `ParsedCosmeticRule` is only usable at visibility `pub(self)`
+   --> src/cosmetic.rs:405:1
+    |
+405 | enum ParsedCosmeticRule {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `is_empty` is never used
+  --> src/cosmetic.rs:45:8
+   |
+44 | impl DomainBucket {
+   | ----------------- method in this implementation
+45 |     fn is_empty(&self) -> bool {
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `blocker_engine` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 20.60s
 
 ═══ Building android-arm64 (aarch64-linux-android) ═══
-    Finished `release` profile [optimized] target(s) in 0.09s
+   Compiling blocker_engine v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+warning: type `ParsedCosmeticRule` is more private than the item `parse_cosmetic_line`
+   --> src/cosmetic.rs:422:1
+    |
+422 | pub fn parse_cosmetic_line(line: &str) -> Option<ParsedCosmeticRule> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `parse_cosmetic_line` is reachable at visibility `pub`
+    |
+note: but type `ParsedCosmeticRule` is only usable at visibility `pub(self)`
+   --> src/cosmetic.rs:405:1
+    |
+405 | enum ParsedCosmeticRule {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `is_empty` is never used
+  --> src/cosmetic.rs:45:8
+   |
+44 | impl DomainBucket {
+   | ----------------- method in this implementation
+45 |     fn is_empty(&self) -> bool {
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `blocker_engine` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 21.44s
 
 ═══ Building android-armv7 (armv7-linux-androideabi) ═══
-    Finished `release` profile [optimized] target(s) in 0.09s
+   Compiling blocker_engine v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+warning: type `ParsedCosmeticRule` is more private than the item `parse_cosmetic_line`
+   --> src/cosmetic.rs:422:1
+    |
+422 | pub fn parse_cosmetic_line(line: &str) -> Option<ParsedCosmeticRule> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `parse_cosmetic_line` is reachable at visibility `pub`
+    |
+note: but type `ParsedCosmeticRule` is only usable at visibility `pub(self)`
+   --> src/cosmetic.rs:405:1
+    |
+405 | enum ParsedCosmeticRule {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `is_empty` is never used
+  --> src/cosmetic.rs:45:8
+   |
+44 | impl DomainBucket {
+   | ----------------- method in this implementation
+45 |     fn is_empty(&self) -> bool {
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `blocker_engine` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 20.53s
 
 ═══ Building android-x86 (i686-linux-android) ═══
-    Finished `release` profile [optimized] target(s) in 0.10s
+   Compiling blocker_engine v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+warning: type `ParsedCosmeticRule` is more private than the item `parse_cosmetic_line`
+   --> src/cosmetic.rs:422:1
+    |
+422 | pub fn parse_cosmetic_line(line: &str) -> Option<ParsedCosmeticRule> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `parse_cosmetic_line` is reachable at visibility `pub`
+    |
+note: but type `ParsedCosmeticRule` is only usable at visibility `pub(self)`
+   --> src/cosmetic.rs:405:1
+    |
+405 | enum ParsedCosmeticRule {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `is_empty` is never used
+  --> src/cosmetic.rs:45:8
+   |
+44 | impl DomainBucket {
+   | ----------------- method in this implementation
+45 |     fn is_empty(&self) -> bool {
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `blocker_engine` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 19.80s
 
 ═══ Building android-x86_64 (x86_64-linux-android) ═══
-    Finished `release` profile [optimized] target(s) in 0.08s
+   Compiling blocker_engine v0.1.0 (/home/qwasieee/Programming/Rust/domain-block)
+warning: type `ParsedCosmeticRule` is more private than the item `parse_cosmetic_line`
+   --> src/cosmetic.rs:422:1
+    |
+422 | pub fn parse_cosmetic_line(line: &str) -> Option<ParsedCosmeticRule> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `parse_cosmetic_line` is reachable at visibility `pub`
+    |
+note: but type `ParsedCosmeticRule` is only usable at visibility `pub(self)`
+   --> src/cosmetic.rs:405:1
+    |
+405 | enum ParsedCosmeticRule {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: method `is_empty` is never used
+  --> src/cosmetic.rs:45:8
+   |
+44 | impl DomainBucket {
+   | ----------------- method in this implementation
+45 |     fn is_empty(&self) -> bool {
+   |        ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `blocker_engine` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 18.52s

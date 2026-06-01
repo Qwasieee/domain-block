@@ -102,6 +102,8 @@ impl FilterListMetadata {
 pub struct FilterListManager {
     /// The live domain tree — rebuilt from enabled lists on startup or toggle
     pub tree: DomainTree,
+    /// Cosmetic rule engine — rebuilt alongside the domain tree
+    pub cosmetic: crate::cosmetic::CosmeticEngine,
     /// Metadata indexed by list name
     pub lists: HashMap<String, FilterListMetadata>,
     /// Directory where list .txt files and lists.json are stored
@@ -180,6 +182,7 @@ impl FilterListManager {
 
         let mut manager = FilterListManager {
             tree: DomainTree::new(),
+            cosmetic: crate::cosmetic::CosmeticEngine::new(),
             lists: HashMap::new(),
             storage_dir,
         };
@@ -194,6 +197,7 @@ impl FilterListManager {
     /// This is called after metadata is loaded, or after toggling a list.
     pub fn rebuild_tree(&mut self, progress: ProgressCallback) -> Result<usize, FilterError> {
         self.tree = DomainTree::new();
+        self.cosmetic = crate::cosmetic::CosmeticEngine::new();
 
         let enabled_names: Vec<String> = self
             .lists
@@ -212,7 +216,7 @@ impl FilterListManager {
         for (idx, name) in enabled_names.iter().enumerate() {
             let path = self.list_file_path(name);
             if path.exists() {
-                let count = parse_list_file_into_tree(&path, &mut self.tree)?;
+                let count = parse_list_file(&path, &mut self.tree, &mut self.cosmetic)?;
                 if let Some(meta) = self.lists.get_mut(name) {
                     meta.rule_count = count;
                 }
@@ -457,7 +461,7 @@ impl FilterListManager {
         // ── Parse file into tree ──────────────────────────────────────────────
         // The list file now exists on disk; parse it streaming.
         let rule_count = if list_path.exists() {
-            parse_list_file_into_tree(&list_path, &mut self.tree)?
+            parse_list_file(&list_path, &mut self.tree, &mut self.cosmetic)?
         } else {
             0
         };
@@ -511,11 +515,13 @@ impl FilterListManager {
 
 // ─── ABP Streaming Parser ─────────────────────────────────────────────────────
 
-/// Parse a locally-stored filter list file into the tree.
-/// Processes one line at a time — no full-file allocation.
-pub fn parse_list_file_into_tree(
+/// Parse a locally-stored filter list file into both the network tree and
+/// the cosmetic engine. Processes one line at a time — no full-file allocation.
+/// Returns the total number of rules inserted (network + cosmetic).
+pub fn parse_list_file(
     path: &Path,
     tree: &mut DomainTree,
+    cosmetic: &mut crate::cosmetic::CosmeticEngine,
 ) -> Result<usize, FilterError> {
     let file = fs::File::open(path)?;
     let reader = BufReader::new(file);
@@ -524,7 +530,7 @@ pub fn parse_list_file_into_tree(
     for line_result in reader.lines() {
         let line = match line_result {
             Ok(l) => l,
-            Err(_) => continue, // Skip unreadable lines
+            Err(_) => continue,
         };
 
         let line = line.trim();
@@ -534,25 +540,29 @@ pub fn parse_list_file_into_tree(
             continue;
         }
 
-        // Skip cosmetic rules (element hiding)
-        if line.contains("##") || line.contains("#@#") || line.contains("#?#") {
-            continue;
-        }
-
         // Skip regex rules
         if line.starts_with('/') && line.ends_with('/') {
             continue;
         }
 
+        // Skip procedural cosmetic rules (#?#) — require JS engine-level support
+        // beyond what our CSS injection covers. These are rare in mainstream lists.
+        if line.contains("#?#") {
+            continue;
+        }
+
+        // Cosmetic rules (## and #@# and ##+js) — route to cosmetic engine.
+        if line.contains("##") || line.contains("#@#") {
+            if cosmetic.insert_line(line) {
+                count += 1;
+            }
+            continue;
+        }
+
+        // Network rules — route to domain tree.
         if let Some(rule) = parse_abp_line(line) {
             use crate::{Action, OriginConstraint};
 
-            // Determine origin constraint from positive/negative origin lists:
-            //   positive only       → OnlyOn(positive)
-            //   negative only       → ExceptOn(negative)
-            //   positive + negative → OnlyOn(positive); mixed form is uncommon
-            //                         and we conservatively prefer positive list
-            //   neither             → Any
             let origin_constraint = match (rule.positive_origins.is_empty(), rule.negative_origins.is_empty()) {
                 (false, _)    => OriginConstraint::OnlyOn(rule.positive_origins),
                 (true, false) => OriginConstraint::ExceptOn(rule.negative_origins),
@@ -573,6 +583,15 @@ pub fn parse_list_file_into_tree(
     }
 
     Ok(count)
+}
+
+/// Backward-compatible alias — used by tests that only care about network rules.
+pub fn parse_list_file_into_tree(
+    path: &Path,
+    tree: &mut DomainTree,
+) -> Result<usize, FilterError> {
+    let mut cosmetic = crate::cosmetic::CosmeticEngine::new();
+    parse_list_file(path, tree, &mut cosmetic)
 }
 
 // ─── ABP Line Parser ──────────────────────────────────────────────────────────

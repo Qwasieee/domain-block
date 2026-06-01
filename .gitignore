@@ -19,3 +19,9 @@ Cargo.lock
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+
+# custom
+1.context_copier.py
+2.git_diff_prompt.py
+trash

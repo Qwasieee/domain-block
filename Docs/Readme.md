@@ -1,68 +1,64 @@
-# 🛡️ Domain Blocker
+# Domain Blocker
 
-High-performance context-aware domain blocking library written in Rust with Flutter/Dart bindings.
+High-performance, context-aware domain blocking library written in Rust, with a Flutter/Dart FFI layer.
 
-## ✨ Features
+## Features
 
-- **⚡ Blazing Fast** - Microsecond query times (~3-5μs per lookup)
-- **🎯 Context-Aware** - Block domains based on origin/referrer
-- **🌳 Radix Tree** - Memory-efficient subdomain matching
-- **💾 Binary Cache** - Fast serialization (5-10ms load for 10K rules)
-- **🔗 Zero-Copy FFI** - Native performance in Flutter
-- **📦 Cross-Platform** - Linux, Android, iOS, macOS, Windows
+- Microsecond query times (~3–5μs per lookup)
+- Context-aware rules: block globally, whitelist on specific origins, or block only on specific origins
+- Radix tree with path compression for memory-efficient subdomain matching
+- Binary cache format (DOMTREE3) — ~5–10ms load for 10K rules vs. ~120ms cold parse
+- EasyList/ABP filter list support with HTTP download and conditional GET updates
+- Cosmetic filtering: CSS selector hiding and scriptlet injection
+- Resource-type and third-party modifiers (`$script`, `$image`, `$third-party`, etc.)
+- Zero-copy FFI — native performance in Flutter via `dart:ffi`
+- Cross-platform: Linux, Android, iOS, macOS, Windows
 
-## 🚀 Quick Start
-
-### Prerequisites
+## Prerequisites
 
 - Rust 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
 - Flutter 3.0+ (optional, for Flutter integration)
 
-### Setup (One Command)
+## Quick Start
 
 ```bash
 ./setup.sh
 ```
 
-This interactive script will:
-1. Check prerequisites
-2. Build the library
-3. Run tests
-4. Guide you through next steps
+Pick **option 5** to build Rust and integrate into a Flutter project in one step, or follow the manual steps below.
 
-### Manual Build
+## Manual Build
 
 ```bash
-# Build for host platform
+# Host platform (debug)
+./build.sh
+
+# Host platform (release)
 ./build.sh -r
 
-# Build for Android
+# Android (release)
 ./build.sh -t android -r
 
-# Build for all platforms
+# All platforms (release)
 ./build.sh -t all -r
 
-# Show all options
+# All options
 ./build.sh --help
 ```
 
-## 📱 Flutter Integration
+## Flutter Integration
 
-### 1. Migrate Libraries
+### 1. Copy libraries
 
 ```bash
-./migrate.sh /path/to/your/flutter/project
+./migrate_to_flutter.sh /path/to/your/flutter/project
 ```
 
-This will:
-- Copy Dart wrapper files to `lib/services/`
-- Copy native libraries to platform-specific directories
-- Create migration report
-- Check dependencies
+Options:
+- `--dry-run` — preview what would be copied without writing anything
+- `--verbose` — detailed output
 
-### 2. Add Dependencies
-
-Add to your `pubspec.yaml`:
+### 2. Add dependencies
 
 ```yaml
 dependencies:
@@ -70,344 +66,343 @@ dependencies:
   path_provider: ^2.1.0
 ```
 
-### 3. Use in Your App
+### 3. Use in Dart
 
 ```dart
 import 'services/domain_blocker_service.dart';
 
-// Universal block (blocks everywhere)
+// Universal block
 await DomainBlockerService.insert('doubleclick.net');
 
-// Whitelist (don't block on specific origin)
+// Whitelist on a specific origin (blocked everywhere except mysite.com)
 await DomainBlockerService.insert(
   'google-analytics.com',
   whitelist: 'mysite.com',
 );
 
-// Conditional block (block ONLY on specific origin)
+// Conditional block (blocked only on annoyingsite.com)
 await DomainBlockerService.insert(
   'amazon-adsystem.com',
   onlyIf: 'annoyingsite.com',
 );
 
-// Check if blocked
+// Check without context
 bool blocked = await DomainBlockerService.isBlocked('doubleclick.net');
 
-// Check with context
+// Check with origin
 bool blocked = await DomainBlockerService.isBlocked(
   'google-analytics.com',
   origin: 'mysite.com',
 );
 ```
 
-## 🎯 Context-Aware Blocking
+## Context-Aware Blocking
 
-### Three Rule Types
+### Rule types
 
-#### 1. Universal Block
-Blocks domain everywhere (traditional ad blocking):
+**Universal block** — blocks the domain everywhere:
 
 ```dart
 await DomainBlockerService.insert('ads.com');
 ```
 
-#### 2. Whitelist (Exception)
-Allows domain on specific origins:
+**Whitelist (exception)** — blocked everywhere *except* on a specific origin:
 
 ```dart
 await DomainBlockerService.insert('analytics.com', whitelist: 'mysite.com');
-// Blocked everywhere EXCEPT on mysite.com
 ```
 
-#### 3. Blacklist (Conditional)
-Blocks domain ONLY on specific origins:
+**Conditional block** — blocked *only* on a specific origin, allowed elsewhere:
 
 ```dart
 await DomainBlockerService.insert('popups.com', onlyIf: 'spamsite.com');
-// Blocked ONLY on spamsite.com, allowed elsewhere
 ```
 
-### Priority System
+### Evaluation order
 
-Rules are evaluated in this order:
-1. **Whitelist** (highest) → Always allows
-2. **Blacklist** → Blocks if origin matches
-3. **Universal** (lowest) → Blocks everywhere
+1. Whitelist — always wins
+2. Conditional block — fires if origin matches
+3. Universal block — fallback
 
-### Subdomain Matching
+### Subdomain matching
 
-All rules automatically match subdomains:
+Rules automatically match subdomains on both the domain and origin side:
 
 ```dart
 await DomainBlockerService.insert('ads.com', whitelist: 'mysite.com');
 
-// These all work:
-isBlocked('ads.com', origin: 'mysite.com')          // ✅ allowed
-isBlocked('sub.ads.com', origin: 'mysite.com')      // ✅ allowed
-isBlocked('ads.com', origin: 'sub.mysite.com')      // ✅ allowed
+isBlocked('ads.com', origin: 'mysite.com')        // allowed
+isBlocked('sub.ads.com', origin: 'mysite.com')    // allowed
+isBlocked('ads.com', origin: 'sub.mysite.com')    // allowed
+isBlocked('ads.com', origin: 'other.com')         // blocked
 ```
 
-## 📊 Performance
+## Filter Lists
+
+The library supports EasyList/ABP-format filter lists managed via `BlockerEngine` (the high-level FFI layer that owns both the domain tree and the cosmetic engine).
+
+Supported rule syntax:
+
+```
+||domain.com^                          universal block
+@@||domain.com^                        exception (whitelist)
+||domain.com^$domain=x.com|y.com       block only on x.com or y.com
+@@||domain.com^$domain=x.com           exception only on x.com
+||domain.com^$script,third-party       block scripts from third-party domain.com
+example.com##.ad-banner                CSS hide rule (cosmetic)
+example.com#@#.ad-banner               CSS exception
+example.com##+js(set-constant, ...)    scriptlet injection
+```
+
+Cosmetic rules (CSS hiding, scriptlets) are handled by `CosmeticEngine` and served as a self-contained JS bundle via `blocker_engine_get_cosmetic_bundle`.
+
+## Performance
 
 Benchmarks on Apple M1:
 
-| Operation | Time | Details |
-|-----------|------|---------|
+| Operation | Time | Notes |
+|-----------|------|-------|
 | Query (no context) | ~3μs | Single domain lookup |
-| Query (with context) | ~5μs | With origin checking |
+| Query (with context) | ~5μs | Origin matching |
 | Bulk insert | ~6μs/domain | 1000 domains |
 | Serialize | ~3ms | 7000 rules |
-| Deserialize | ~7ms | 7000 rules (5.7x faster) |
+| Deserialize | ~7ms | 7000 rules |
 | Cache size | ~19 bytes/rule | Binary format |
 
-## 🛠️ Development
+Benchmarks on Snapdragon 730:
 
-### Project Structure
+| Operation | 100K domains | 500K domains |
+|-----------|-------------|-------------|
+| Build (cold) | 120ms | 650ms |
+| Load from cache | 12ms | 65ms |
+| Query | 0.8μs | 1.2μs |
+
+## Project Structure
 
 ```
-domain_blocker/
-├── src/
-│   ├── lib.rs              # Core library + FFI
-│   └── main.rs             # CLI demo
-├── dart/
-│   ├── domain_blocker.dart         # FFI wrapper
-│   └── domain_blocker_service.dart # Service layer
-├── examples/
-│   └── performance_test.rs # Comprehensive benchmarks
-├── build.sh                # Enhanced build script
-├── migrate.sh              # Flutter migration tool
-├── setup.sh                # Quick setup script
-└── README.md               # This file
+src/
+├── lib.rs              # DomainTree, BlockerEngine, full FFI surface
+├── filter_list.rs      # FilterListManager: download, parse, store EasyList files
+├── cosmetic.rs         # CosmeticEngine: CSS/scriptlet rule storage and bundle output
+└── main.rs             # Minimal CLI demo
+examples/
+└── performance_test.rs # Benchmark suite
+build.sh                # Build script (Linux, Android, iOS, macOS, Windows)
+migrate_to_flutter.sh   # Copies native libs into a Flutter project
+setup.sh                # Interactive first-time setup
 ```
 
-### Scripts
+## API Reference
 
-#### `setup.sh`
-Interactive setup for new users:
-```bash
-./setup.sh
+### Rust — `DomainTree`
+
+Direct tree API, used when you manage rules programmatically without filter list files.
+
+```rust
+use blocker_engine::DomainTree;
+
+let mut tree = DomainTree::new();
+
+tree.insert("ads.com");
+tree.insert_with_whitelist("analytics.com", "mysite.com");
+tree.insert_with_blacklist("tracker.com", "badsite.com");
+
+// Full insert with resource type and third-party modifiers
+use blocker_engine::{Action, OriginConstraint, resource_type};
+tree.insert_with_modifiers(
+    "cdn.ads.com",
+    Action::Block,
+    OriginConstraint::Any,
+    resource_type::SCRIPT | resource_type::IMAGE,
+    true, // third_party_only
+);
+
+// Queries
+tree.is_blocked("ads.com");
+tree.is_blocked_with_origin("ads.com", Some("mysite.com"));
+tree.is_blocked_ex("ads.com", Some("mysite.com"), resource_type::SCRIPT, true);
+
+// Cache
+tree.save_to_file("cache.bin")?;
+let tree = DomainTree::load_from_file("cache.bin")?;
 ```
 
-#### `build.sh`
-Flexible build system:
-```bash
-./build.sh                    # Host platform (debug)
-./build.sh -r                 # Host platform (release)
-./build.sh -t android -r      # Android (release)
-./build.sh -t all -r          # All platforms
-./build.sh --help             # Show all options
+Cache format: `DOMTREE3` (little-endian binary). Files from earlier versions (`DOMTREE1`, `DOMTREE2`) are not forward-compatible and must be regenerated.
+
+### Rust — `BlockerEngine` (high-level)
+
+Owns a `FilterListManager` and a `CosmeticEngine`. This is the handle used by the FFI layer.
+
+```rust
+// Managed via FFI; see C API below for Dart usage.
+// Each BlockerEngine stores filter lists on disk under a given storage_dir
+// and rebuilds the tree from them on demand.
 ```
 
-Options:
-- `-t, --target` - Platform (linux, android, ios, macos, windows, all)
-- `-r, --release` - Release build
-- `--test` - Run tests after build
-- `-v, --verbose` - Verbose output
+### C FFI (for Dart)
 
-#### `migrate.sh`
-Copy libraries to Flutter project:
-```bash
-./migrate.sh /path/to/flutter/project
-./migrate.sh ~/my_app --dry-run    # Preview changes
-./migrate.sh ~/my_app --verbose    # Detailed output
+All functions are `#[no_mangle]` exports prefixed `blocker_engine_`.
+
+**Lifecycle**
+
+```c
+void* blocker_engine_new(const char* storage_dir);
+void  blocker_engine_free(void* engine);
 ```
 
-### Running Tests
+**Filter lists**
 
-```bash
-# Unit tests
-cargo test
-
-# Performance benchmarks
-cargo run --example performance_test --release
-
-# With features
-cargo test --all-features
+```c
+usize blocker_engine_rebuild(void* engine, progress_cb);
+usize blocker_engine_install(void* engine, const char* name, const char* url, progress_cb);
+usize blocker_engine_update(void* engine, const char* name, progress_cb);
+usize blocker_engine_update_all(void* engine, progress_cb);
+bool  blocker_engine_remove(void* engine, const char* name, progress_cb);
+bool  blocker_engine_set_enabled(void* engine, const char* name, bool enabled, progress_cb);
+char* blocker_engine_get_list_info(void* engine, const char* name);   // JSON; free with blocker_engine_free_string
+char* blocker_engine_get_all_lists(void* engine);                     // JSON array; free with blocker_engine_free_string
 ```
 
-## 📖 API Reference
+**Manual rule insertion**
 
-### Dart API
+```c
+bool  blocker_engine_insert(void* engine, const char* domain);
+bool  blocker_engine_insert_with_whitelist(void* engine, const char* domain, const char* origin);
+bool  blocker_engine_insert_with_blacklist(void* engine, const char* domain, const char* origin);
+bool  blocker_engine_bulk_insert(void* engine, const char** domains, usize count);
+```
 
-#### Insert Rules
+**Queries**
+
+```c
+bool  blocker_engine_is_blocked(void* engine, const char* domain);
+bool  blocker_engine_is_blocked_with_origin(void* engine, const char* domain, const char* origin);
+bool  blocker_engine_is_blocked_ex(void* engine, const char* domain, const char* origin,
+                                    uint16_t resource_mask, bool is_third_party);
+```
+
+**Stats**
+
+```c
+usize blocker_engine_total_rules(void* engine);
+usize blocker_engine_count_blocked(void* engine);
+char** blocker_engine_get_all_blocked(void* engine, usize* out_count);
+void   blocker_engine_free_string_array(char** arr, usize count);
+```
+
+**Cosmetics**
+
+```c
+// Returns a self-contained JS bundle (CSS injection + scriptlet calls) for host.
+// host is a bare hostname, e.g. "news.example.com" — no scheme, path, or port.
+// Free the result with blocker_engine_free_string.
+char* blocker_engine_get_cosmetic_bundle(void* engine, const char* host);
+usize blocker_engine_cosmetic_rule_count(void* engine);
+```
+
+**Memory**
+
+```c
+void blocker_engine_free_string(char* s);
+void blocker_engine_free_string_array(char** arr, usize count);
+```
+
+### Dart API (service layer)
 
 ```dart
-// Universal block
+// Rule insertion
 Future<bool> insert(String domain)
-
-// With context
 Future<bool> insert(String domain, {String? whitelist, String? onlyIf})
-```
-
-#### Query
-
-```dart
-// Check without context
-Future<bool> isBlocked(String domain)
-
-// Check with context
-Future<bool> isBlocked(String domain, {String? origin})
-```
-
-#### Bulk Operations
-
-```dart
-// Bulk load (universal blocks)
 Future<bool> bulkLoad(List<String> domains)
 
-// Get statistics
-Future<int> countBlocked()
+// Queries
+Future<bool> isBlocked(String domain)
+Future<bool> isBlocked(String domain, {String? origin})
+
+// Stats
+Future<int>          countBlocked()
 Future<List<String>> getAllBlocked()
-```
 
-#### Cache Management
-
-```dart
+// Cache
 Future<bool> saveCache()
 Future<bool> reloadCache()
 Future<void> reset()
 Future<Map<String, dynamic>> getCacheInfo()
 ```
 
-### Rust API
+## Example Use Cases
 
-```rust
-use domain_blocker::DomainTree;
+### WebView ad blocking
 
-let mut tree = DomainTree::new();
-
-// Insert rules
-tree.insert("ads.com");
-tree.insert_with_whitelist("analytics.com", "mysite.com");
-tree.insert_with_blacklist("tracker.com", "badsite.com");
-
-// Query
-let blocked = tree.is_blocked("ads.com");
-let blocked = tree.is_blocked_with_origin("ads.com", Some("mysite.com"));
-
-// Serialization
-tree.save_to_file("cache.bin")?;
-let tree = DomainTree::load_from_file("cache.bin")?;
-```
-
-## 🎨 Example Use Cases
-
-### Browser Extension
 ```dart
-// Block ads but support favorite creators
-await DomainBlockerService.insert('doubleclick.net');
-await DomainBlockerService.insert('doubleclick.net', whitelist: 'creator-blog.com');
-
 String currentSite = getCurrentPage();
 bool shouldBlock = await DomainBlockerService.isBlocked(
   adDomain,
   origin: currentSite,
 );
+// Support a specific site while still blocking ads elsewhere
+await DomainBlockerService.insert('doubleclick.net', whitelist: 'creator-blog.com');
 ```
 
-### Parental Controls
+### Parental controls
+
 ```dart
-// Block social media during study hours
 if (isStudyTime()) {
   await DomainBlockerService.insert('facebook.com', onlyIf: 'study-mode');
   await DomainBlockerService.insert('instagram.com', onlyIf: 'study-mode');
 }
-
 bool blocked = await DomainBlockerService.isBlocked(
   'facebook.com',
   origin: isStudyTime() ? 'study-mode' : null,
 );
 ```
 
-### Privacy Protection
+### Privacy protection with own analytics exempted
+
 ```dart
-// Block trackers universally
 await DomainBlockerService.bulkLoad([
   'google-analytics.com',
   'facebook-pixel.com',
   'doubleclick.net',
 ]);
-
-// Allow own analytics
 await DomainBlockerService.insert(
   'google-analytics.com',
   whitelist: 'mywebsite.com',
 );
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
-### Build Issues
+**`EM_X86_64 instead of EM_AARCH64` on Android** — stale host-platform `.so` in JNI libs. Run `./build.sh -t android -r && ./migrate_to_flutter.sh /path/to/app`. The migrate script removes stale artifacts.
 
-**Error: Target not installed**
-```bash
-rustup target add aarch64-linux-android
-```
+**`Target not installed`** — `rustup target add aarch64-linux-android` (or the relevant target).
 
-**Error: NDK not found (Android)**
-```bash
-export ANDROID_NDK_HOME=/path/to/ndk
-```
+**`NDK not found`** — `export ANDROID_NDK_HOME=/path/to/ndk`, or install via Android Studio → SDK Manager → SDK Tools → NDK.
 
-### Flutter Issues
+**Cache rejected at load** — the file is from an older format version. Delete it and let the engine rebuild.
 
-**FFI errors**
-```bash
-flutter clean
-flutter pub get
-flutter run
-```
+**FFI errors after `flutter run`** — `flutter clean && flutter pub get && flutter run`.
 
-**Library not found**
-```bash
-# Make sure libraries are in the right place
-./migrate.sh /path/to/project --verbose
-```
+**Library not found** — re-run `./migrate_to_flutter.sh /path/to/project --verbose` to check where the `.so`/`.dylib` landed.
 
-## 📝 Migration Notes
-
-### From v1 to v2
-
-v2 adds context-aware blocking while maintaining backward compatibility:
-
-```dart
-// Old API still works
-await DomainBlockerService.insert('ads.com');
-bool blocked = await DomainBlockerService.isBlocked('ads.com');
-
-// New context-aware features
-await DomainBlockerService.insert('ads.com', whitelist: 'mysite.com');
-bool blocked = await DomainBlockerService.isBlocked('ads.com', origin: 'mysite.com');
-```
-
-Old cache files (v1) are automatically upgraded on load.
-
-## 🤝 Contributing
-
-Contributions welcome! Please ensure:
+## Running Tests
 
 ```bash
-# Tests pass
+cargo test                                          # unit tests
+cargo test --all-features                           # with all features
+cargo run --example performance_test --release      # benchmark suite
+```
+
+## Contributing
+
+Before submitting a PR:
+
+```bash
 cargo test
-
-# Code is formatted
 cargo fmt
-
-# No clippy warnings
 cargo clippy
 ```
 
-## 📄 License
+## License
 
-MIT License - see LICENSE file for details
-
-## 🙏 Acknowledgments
-
-- Built with Rust 🦀
-- Flutter integration via FFI
-- Radix tree implementation
-- Context-aware filtering inspired by AdBlock Plus syntax
-
----
-
-**Built with ❤️ for privacy and performance**
+MIT — see LICENSE.

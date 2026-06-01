@@ -1,3 +1,4 @@
+pub mod cosmetic;
 pub mod filter_list;
 
 use std::collections::HashMap;
@@ -913,6 +914,50 @@ pub extern "C" fn blocker_engine_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe { let _ = std::ffi::CString::from_raw(s); }
     }
+}
+
+// ── Cosmetic injection ────────────────────────────────────────────────────────
+
+/// Build a JS injection bundle for the given host page.
+///
+/// The returned string is a self-contained IIFE ready to inject at
+/// AT_DOCUMENT_START via flutter_inappwebview. It contains:
+///   - A CSS <style> injection hiding cosmetic-filtered elements
+///   - Compiled scriptlet calls (set-constant, abort-on-property-read, etc.)
+///
+/// Returns an empty C string "" (not NULL) when there are no rules for this
+/// host — callers can skip injection on empty string without null-checking.
+/// Free the result with `blocker_engine_free_string`.
+///
+/// `host` should be the bare hostname of the page being navigated to,
+/// e.g. "news.example.com" (no scheme, no path, no port).
+#[no_mangle]
+pub extern "C" fn blocker_engine_get_cosmetic_bundle(
+    engine: *const BlockerEngine,
+    host: *const c_char,
+) -> *mut c_char {
+    if engine.is_null() || host.is_null() {
+        return std::ffi::CString::new("").unwrap().into_raw();
+    }
+    unsafe {
+        let host_str = match CStr::from_ptr(host).to_str() {
+            Ok(s) => s,
+            Err(_) => return std::ffi::CString::new("").unwrap().into_raw(),
+        };
+        let bundle = (*engine).cosmetic.build_bundle(host_str);
+        std::ffi::CString::new(bundle)
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+            .into_raw()
+    }
+}
+
+/// Total number of cosmetic rules currently loaded (CSS + scriptlets + exceptions).
+#[no_mangle]
+pub extern "C" fn blocker_engine_cosmetic_rule_count(
+    engine: *const BlockerEngine,
+) -> usize {
+    if engine.is_null() { return 0; }
+    unsafe { (*engine).cosmetic.total_rules() }
 }
 
 // ============================================================================
